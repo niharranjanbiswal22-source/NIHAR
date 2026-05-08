@@ -96,7 +96,6 @@ def index():
     """Serve the main HTML page"""
 
     return send_from_directory(
-        'views',
         'index.html'
     )
 
