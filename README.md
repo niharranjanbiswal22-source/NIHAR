@@ -1,4 +1,4 @@
-# Flux Dev Image Generator
+
 
 A modern, beautiful web application for generating AI images using the Flux Dev model via HuggingFace Inference API.
 
