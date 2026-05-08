@@ -1,0 +1,130 @@
+from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS
+import base64
+import os
+import io
+from dotenv import load_dotenv
+from huggingface_hub import InferenceClient
+
+load_dotenv()
+
+app = Flask(__name__)
+CORS(app)
+
+# Get HuggingFace token from environment variable
+HF_TOKEN = os.getenv("HF_TOKEN", "")
+
+# Hugging Face Inference Client for Flux Dev model
+client = InferenceClient(
+    provider="fal-ai",
+    api_key=HF_TOKEN,
+)
+
+def query_hf_api(prompt, width, height, steps):
+    """
+    Query Hugging Face Inference API
+    This uses HuggingFace's inference API - no local GPU needed!
+    """
+    
+    image = client.text_to_image(
+        prompt,
+        model="black-forest-labs/FLUX.1-dev",
+    )
+
+    buffered = io.BytesIO()
+    image.save(buffered, format="PNG")
+
+    return buffered.getvalue()
+
+@app.route('/generate', methods=['POST'])
+def generate_image():
+    """Generate image from prompt using Flux Dev model via HuggingFace API"""
+    try:
+        data = request.json
+        prompt = data.get('prompt', '')
+        width = data.get('width', 1024)
+        height = data.get('height', 1024)
+        steps = data.get('steps', 28)
+        
+        # Validation
+        if not prompt:
+            return jsonify({'error': 'Prompt is required'}), 400
+        
+        if not HF_TOKEN:
+            return jsonify({
+                'error': 'HuggingFace token not configured. Please set HF_TOKEN environment variable.',
+                'help': 'Get your token from https://huggingface.co/settings/tokens'
+            }), 401
+        
+        print(f"Generating image: {prompt[:60]}...")
+        print(f"Parameters: {width}x{height}, steps={steps}")
+        
+        # Query the Hugging Face Inference API
+        image_bytes = query_hf_api(prompt, width, height, steps)
+        
+        # Convert to base64 for sending to frontend
+        img_base64 = base64.b64encode(image_bytes).decode('utf-8')
+        
+        print("✓ Image generated successfully!")
+        
+        return jsonify({
+            'success': True,
+            'image': img_base64,
+            'message': 'Image generated successfully'
+        })
+    
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return jsonify({
+            'error': 'Internal server error',
+            'message': str(e)
+        }), 500
+
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint"""
+    return jsonify({
+        'status': 'healthy',
+        'model': 'FLUX.1-dev by Black Forest Labs',
+        'api': 'HuggingFace Inference API (Free)',
+        'token_configured': bool(HF_TOKEN and HF_TOKEN != "your_hf_token_here"),
+        'note': 'No local GPU required - runs on HuggingFace servers'
+    })
+
+@app.route('/')
+def index():
+    """Serve the main HTML page"""
+    return send_from_directory('views', 'index.html')
+
+@app.route('/<path:filename>')
+def serve_static(filename):
+    """Serve static files (CSS, JS)"""
+    return send_from_directory('views', filename)
+
+if __name__ == '__main__':
+    print("\n" + "="*70)
+    print(" 🎨 FLUX DEV IMAGE GENERATOR SERVER")
+    print("="*70)
+    print(f" Server running at: http://localhost:5000")
+    print(f" Model: black-forest-labs/FLUX.1-dev")
+    print(f" API: HuggingFace Inference (Free - No GPU needed!)")
+    print("="*70)
+    
+    if not HF_TOKEN or HF_TOKEN == "your_hf_token_here":
+        print("\n ⚠️  WARNING: HuggingFace token not configured!")
+        print(" Please set HF_TOKEN environment variable or create .env file:")
+        print(" 1. Get token from: https://huggingface.co/settings/tokens")
+        print(" 2. Create .env file with: HF_TOKEN=your_token_here")
+        print(" 3. Make sure you have access to FLUX.1-dev model\n")
+    else:
+        print(f"\n ✓ HuggingFace token configured")
+        print(" ✓ Ready to generate images!\n")
+    
+    print("="*70 + "\n")
+    
+    app.run(host='0.0.0.0', port=5000, debug=True)
+
+
+
+    HF_TOKEN=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
